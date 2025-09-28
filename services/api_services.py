@@ -29,27 +29,111 @@ class APIServices:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if self.session:
             await self.session.close()
-
-    async def get_selic_rate(self) -> Dict[str, Any]:
+            
+################################## Indicadores Macroeconômicos ##################################
+    async def get_gdp(self) -> Dict[str, Any]:
+        """PIB - Produto Interno Bruto Trimestral (IBGE)"""
         try:
-            url = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.432/dados/ultimos/1?formato=json"
+            # PIB trimestral a preços correntes - Tabela 1846 do IBGE/SIDRA
+            # Variável 585: PIB a preços de mercado
+            url = "https://servicodados.ibge.gov.br/api/v3/agregados/1846/periodos/-2/variaveis/585?localidades=N1[all]"
             async with self.session.get(url) as response:
                 if response.status == 200:
                     data = await response.json()
+                    if data and data[0]['resultados']:
+                        resultados = data[0]['resultados'][0]['series'][0]['serie']
+                        periodos = sorted(resultados.keys(), reverse=True)
+                        
+                        if len(periodos) >= 2:
+                            # Período mais recente
+                            ultimo_periodo = periodos[0]
+                            penultimo_periodo = periodos[1]
+                            
+                            ultimo_valor = parse_float(resultados[ultimo_periodo])
+                            penultimo_valor = parse_float(resultados[penultimo_periodo])
+                            
+                            if ultimo_valor is not None:
+                                # Converter de milhões para trilhões para melhor visualização
+                                valor_trilhoes = ultimo_valor / 1_000_000
+                                
+                                # Calcular variação trimestral se temos dados anteriores
+                                variacao_info = ""
+                                if penultimo_valor is not None:
+                                    variacao = ((ultimo_valor - penultimo_valor) / penultimo_valor) * 100
+                                    sinal = "+" if variacao > 0 else ""
+                                    variacao_info = f" ({sinal}{variacao:.1f}% trim.)"
+                                
+                                return {
+                                    "nome": "PIB (Produto Interno Bruto)",
+                                    "valor": f"R$ {valor_trilhoes:.2f} trilhões{variacao_info}",
+                                    "descricao": f"PIB trimestral a preços correntes - {ultimo_periodo}"
+                                }
+                        
+                        elif len(periodos) >= 1:
+                            # Apenas um período disponível
+                            ultimo_periodo = periodos[0]
+                            ultimo_valor = parse_float(resultados[ultimo_periodo])
+                            
+                            if ultimo_valor is not None:
+                                valor_trilhoes = ultimo_valor / 1_000_000
+                                return {
+                                    "nome": "PIB (Produto Interno Bruto)",
+                                    "valor": f"R$ {valor_trilhoes:.2f} trilhões",
+                                    "descricao": f"PIB trimestral a preços correntes - {ultimo_periodo}"
+                                }
+        except Exception as e:
+            logger.error(f"Erro ao obter PIB: {e}")
+        
+        # Fallback para dados do BCB se o IBGE falhar
+        try:
+            logger.info("Tentando fallback para dados do BCB...")
+            url_bcb = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.4380/dados/ultimos/1?formato=json"
+            async with self.session.get(url_bcb) as response:
+                if response.status == 200:
+                    data = await response.json()
                     if data:
-                        valor = parse_float(data[0]['valor'])
+                        valor = parse_float(data[0].get("valor"))
+                        periodo = data[0].get("data")
                         if valor is not None:
                             return {
-                                "nome": "Taxa Selic",
-                                "valor": f"{valor}%",
-                                "descricao": f"Taxa básica de juros - Última atualização: {data[0]['data']}"
+                                "nome": "PIB (Produto Interno Bruto)",
+                                "valor": f"R$ {valor:,.0f} milhões",
+                                "descricao": f"PIB mensal (BCB) - {periodo}"
                             }
         except Exception as e:
-            logger.error(f"Erro ao obter taxa Selic: {e}")
-        return {"nome": "Taxa Selic", "valor": "N/D", "descricao": "Erro ao obter dados"}
-
-    async def get_ipca(self) -> Dict[str, Any]:
+            logger.error(f"Erro no fallback do PIB (BCB): {e}")
+        
+        return {"nome": "PIB (Produto Interno Bruto)", "valor": "N/D", "descricao": "Erro ao obter dados"}
+    
+    async def get_gdp_growth(self) -> Dict[str, Any]:
+        """PIB - Variação percentual em volume (dessazonalizada)"""
         try:
+            # PIB variação trimestral dessazonalizada - Tabela 1621
+            # Variável 583: PIB a preços de mercado - Taxa trimestral (%)
+            url = "https://servicodados.ibge.gov.br/api/v3/agregados/1621/periodos/-4/variaveis/583?localidades=N1[all]"
+            async with self.session.get(url) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if data and data[0]['resultados']:
+                        resultados = data[0]['resultados'][0]['series'][0]['serie']
+                        periodo_mais_recente = max(resultados.keys())
+                        valor = parse_float(resultados[periodo_mais_recente])
+                        
+                        if valor is not None:
+                            sinal = "+" if valor > 0 else ""
+                            return {
+                                "nome": "PIB - Crescimento",
+                                "valor": f"{sinal}{valor}%",
+                                "descricao": f"Variação trimestral dessazonalizada - {periodo_mais_recente}"
+                            }
+        except Exception as e:
+            logger.error(f"Erro ao obter crescimento do PIB: {e}")
+        return {"nome": "PIB - Crescimento", "valor": "N/D", "descricao": "Erro ao obter dados"}
+    
+    async def get_ipca(self) -> Dict[str, Any]:
+        """IPCA - Índice de Preços ao Consumidor Amplo"""
+        try:
+            # IPCA acumulado 12 meses
             url = "https://servicodados.ibge.gov.br/api/v3/agregados/1737/periodos/-12/variaveis/63?localidades=N1[all]"
             async with self.session.get(url) as response:
                 if response.status == 200:
@@ -67,8 +151,50 @@ class APIServices:
         except Exception as e:
             logger.error(f"Erro ao obter IPCA: {e}")
         return {"nome": "Inflação (IPCA)", "valor": "N/D", "descricao": "Erro ao obter dados"}
-
+    
+    async def get_igpm(self) -> Dict[str, Any]:
+        """IGP-M - Índice Geral de Preços do Mercado"""
+        try:
+            # IGP-M mensal
+            url = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.189/dados/ultimos/1?formato=json"
+            async with self.session.get(url) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if data:
+                        valor = parse_float(data[0].get("valor"))
+                        periodo = data[0].get("data")
+                        if valor is not None:
+                            return {
+                                "nome": "IGP-M (Inflação)",
+                                "valor": f"{valor}%",
+                                "descricao": f"IGP-M mensal - {periodo}"
+                            }
+        except Exception as e:
+            logger.error(f"Erro ao obter IGP-M: {e}")
+        return {"nome": "IGP-M (Inflação)", "valor": "N/D", "descricao": "Erro ao obter dados"}
+    
+    async def get_selic_rate(self) -> Dict[str, Any]:
+        """Taxa Selic - Taxa básica de juros"""
+        try:
+            url = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.432/dados/ultimos/1?formato=json"
+            async with self.session.get(url) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if data:
+                        valor = parse_float(data[0]['valor'])
+                        periodo = data[0].get("data")
+                        if valor is not None:
+                            return {
+                                "nome": "Taxa Selic",
+                                "valor": f"{valor}%",
+                                "descricao": f"Taxa básica de juros - {periodo}"
+                            }
+        except Exception as e:
+            logger.error(f"Erro ao obter taxa Selic: {e}")
+        return {"nome": "Taxa Selic", "valor": "N/D", "descricao": "Erro ao obter dados"}
+    
     async def get_dollar_rate(self) -> Dict[str, Any]:
+        """Cotação do Dólar americano"""
         try:
             url = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.1/dados/ultimos/1?formato=json"
             async with self.session.get(url) as response:
@@ -76,18 +202,22 @@ class APIServices:
                     data = await response.json()
                     if data:
                         valor = parse_float(data[0]['valor'])
+                        periodo = data[0].get("data")
                         if valor is not None:
                             return {
                                 "nome": "Dólar (USD/BRL)",
-                                "valor": f"R$ {valor:.2f}",
-                                "descricao": f"Cotação comercial - {data[0]['data']}"
+                                "valor": f"R$ {valor:.4f}",
+                                "descricao": f"Cotação comercial - {periodo}"
                             }
         except Exception as e:
             logger.error(f"Erro ao obter cotação do dólar: {e}")
         return {"nome": "Dólar (USD/BRL)", "valor": "N/D", "descricao": "Erro ao obter dados"}
-
+    
+################################## Mercado de trabalho ##################################
     async def get_unemployment_rate(self) -> Dict[str, Any]:
+        """Taxa de Desemprego"""
         try:
+            # Taxa de desocupação na semana de referência, na população de 14 anos ou mais de idade
             url = "https://servicodados.ibge.gov.br/api/v3/agregados/4099/periodos/-1/variaveis/4099?localidades=N1[all]"
             async with self.session.get(url) as response:
                 if response.status == 200:
@@ -105,43 +235,167 @@ class APIServices:
         except Exception as e:
             logger.error(f"Erro ao obter taxa de desemprego: {e}")
         return {"nome": "Taxa de Desemprego", "valor": "N/D", "descricao": "Erro ao obter dados"}
-
-    async def get_pib(self) -> Dict[str, Any]:
+    
+    async def get_real_income(self) -> Dict[str, Any]:
+        """Rendimento médio real habitual"""
         try:
-            url = "https://servicodados.ibge.gov.br/api/v3/agregados/6601/periodos/-4/variaveis/584?localidades=N1[all]"
+            # Rendimento médio real habitual das pessoas de 14 anos ou mais de idade ocupadas na semana de referência com rendimento de trabalho
+            url = "https://servicodados.ibge.gov.br/api/v3/agregados/6318/periodos/-1/variaveis/5929?localidades=N1[all]"
             async with self.session.get(url) as response:
                 if response.status == 200:
                     data = await response.json()
                     if data and data[0]['resultados']:
                         resultados = data[0]['resultados'][0]['series'][0]['serie']
-                        periodos = sorted(resultados.keys(), reverse=True)
-                        ultimo_valor = parse_float(resultados[periodos[0]])
-                        penultimo_valor = parse_float(resultados[periodos[1]]) if len(periodos) > 1 else ultimo_valor
-                        if ultimo_valor is None or penultimo_valor is None:
-                            return {"nome": "PIB per Capta", "valor": "N/D", "descricao": "Dados não disponíveis"}
-                        variacao = ((ultimo_valor - penultimo_valor) / penultimo_valor) * 100 if penultimo_valor != 0 else 0
-                        return {
-                            "nome": "PIB",
-                            "valor": f"R$ {ultimo_valor/1000:.1f} trilhões",
-                            "descricao": f"Variação: {variacao:+.1f}% - {periodos[0]}"
-                        }
+                        periodo_mais_recente = max(resultados.keys())
+                        valor = parse_float(resultados[periodo_mais_recente])
+                        if valor is not None:
+                            return {
+                                "nome": "Rendimento Médio Real",
+                                "valor": f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
+                                "descricao": f"Rendimento médio real habitual - {periodo_mais_recente}"
+                            }
         except Exception as e:
-            logger.error(f"Erro ao obter PIB: {e}")
-        return {"nome": "PIB", "valor": "N/D", "descricao": "Erro ao obter dados"}
-
-    async def get_bovespa(self) -> Dict[str, Any]:
+            logger.error(f"Erro ao obter rendimento médio real: {e}")
+        return {"nome": "Rendimento Médio Real", "valor": "N/D", "descricao": "Erro ao obter dados"}
+    
+################################## Comércio Exterior ##################################
+    async def get_trade_balance(self) -> Dict[str, Any]:
+        """Balança Comercial - Exportações vs Importações"""
         try:
-            return {
-                "nome": "Ibovespa",
-                "valor": "Consultar B3",
-                "descricao": "Para dados em tempo real, consulte o site da B3"
-            }
+            # Balança comercial mensal - FOB
+            url_balance = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.22707/dados/ultimos/1?formato=json"
+            url_exports = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.22783/dados/ultimos/1?formato=json"
+            url_imports = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.22815/dados/ultimos/1?formato=json"
+
+            async with self.session.get(url_balance) as resp_bal, \
+                       self.session.get(url_exports) as resp_exp, \
+                       self.session.get(url_imports) as resp_imp:
+                
+                if all(resp.status == 200 for resp in [resp_bal, resp_exp, resp_imp]):
+                    data_bal = await resp_bal.json()
+                    data_exp = await resp_exp.json()
+                    data_imp = await resp_imp.json()
+
+                    if all(data for data in [data_bal, data_exp, data_imp]):
+                        balance = parse_float(data_bal[0].get("valor"))
+                        exports = parse_float(data_exp[0].get("valor"))
+                        imports = parse_float(data_imp[0].get("valor"))
+                        periodo = data_bal[0].get("data")
+
+                        if all(val is not None for val in [balance, exports, imports]):
+                            situacao = "Superávit" if balance > 0 else "Déficit" if balance < 0 else "Equilibrio"
+                            return {
+                                "nome": "Balança Comercial",
+                                "valor": f"{situacao} de US$ {abs(balance):,.2f} mi",
+                                "descricao": f"Exp: US$ {exports:,.2f} mi | Imp: US$ {imports:,.2f} mi - {periodo}"
+                            }
+        except Exception as e:
+            logger.error(f"Erro ao obter balança comercial: {e}")
+        return {"nome": "Balança Comercial", "valor": "N/D", "descricao": "Erro ao obter dados"}
+    
+    async def get_trade_flow(self) -> Dict[str, Any]:
+        """Corrente de Comércio (Exportações + Importações)"""
+        try:
+            url_exports = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.22783/dados/ultimos/1?formato=json"
+            url_imports = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.22815/dados/ultimos/1?formato=json"
+
+            async with self.session.get(url_exports) as resp_exp, \
+                       self.session.get(url_imports) as resp_imp:
+                
+                if resp_exp.status == 200 and resp_imp.status == 200:
+                    data_exp = await resp_exp.json()
+                    data_imp = await resp_imp.json()
+
+                    if data_exp and data_imp:
+                        exports = parse_float(data_exp[0].get("valor"))
+                        imports = parse_float(data_imp[0].get("valor"))
+                        periodo = data_exp[0].get("data")
+
+                        if exports is not None and imports is not None:
+                            corrente = exports + imports
+                            return {
+                                "nome": "Corrente de Comércio",
+                                "valor": f"US$ {corrente:,.2f} milhões",
+                                "descricao": f"Exp: US$ {exports:,.2f} mi + Imp: US$ {imports:,.2f} mi - {periodo}"
+                            }
+        except Exception as e:
+            logger.error(f"Erro ao obter corrente de comércio: {e}")
+        return {"nome": "Corrente de Comércio", "valor": "N/D", "descricao": "Erro ao obter dados"}
+        
+################################## Setor Financeiro e Mercado de Capitais ##################################
+    async def get_bovespa(self) -> Dict[str, Any]:
+        """Índice Bovespa - usando série do BCB"""
+        try:
+            # Ibovespa - fechamento
+            url = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.7/dados/ultimos/2?formato=json"
+            async with self.session.get(url) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if len(data) >= 2:
+                        atual = parse_float(data[-1].get("valor"))
+                        anterior = parse_float(data[-2].get("valor"))
+                        periodo = data[-1].get("data")
+                        
+                        if atual is not None and anterior is not None:
+                            variacao = ((atual - anterior) / anterior) * 100
+                            sinal = "+" if variacao > 0 else ""
+                            return {
+                                "nome": "Ibovespa",
+                                "valor": f"{atual:,.0f} pontos ({sinal}{variacao:.2f}%)",
+                                "descricao": f"Índice da B3 - {periodo}"
+                            }
         except Exception as e:
             logger.error(f"Erro ao obter Ibovespa: {e}")
         return {"nome": "Ibovespa", "valor": "N/D", "descricao": "Erro ao obter dados"}
-
-    async def get_industrial_production(self) -> Dict[str, Any]:
+    
+    async def get_credit_volume(self) -> Dict[str, Any]:
+        """Volume total de crédito"""
         try:
+            # Operações de crédito do Sistema Financeiro Nacional
+            url = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.20539/dados/ultimos/1?formato=json"
+            async with self.session.get(url) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if data:
+                        valor = parse_float(data[0].get("valor"))
+                        periodo = data[0].get("data")
+                        if valor is not None:
+                            # Valor já vem em milhões de reais
+                            return {
+                                "nome": "Volume de Crédito",
+                                "valor": f"R$ {valor:,.0f} milhões",
+                                "descricao": f"Saldo das operações de crédito - {periodo}"
+                            }
+        except Exception as e:
+            logger.error(f"Erro ao obter volume de crédito: {e}")
+        return {"nome": "Volume de Crédito", "valor": "N/D", "descricao": "Erro ao obter dados"}
+        
+    async def get_default_rate(self) -> Dict[str, Any]:
+        """Taxa de inadimplência"""
+        try:
+            # Taxa de inadimplência das operações de crédito
+            url = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.21082/dados/ultimos/1?formato=json"
+            async with self.session.get(url) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if data:
+                        valor = parse_float(data[0].get("valor"))
+                        periodo = data[0].get("data")
+                        if valor is not None:
+                            return {
+                                "nome": "Taxa de Inadimplência",
+                                "valor": f"{valor:.2f}%",
+                                "descricao": f"Taxa de inadimplência do crédito - {periodo}"
+                            }
+        except Exception as e:
+            logger.error(f"Erro ao obter taxa de inadimplência: {e}")
+        return {"nome": "Taxa de Inadimplência", "valor": "N/D", "descricao": "Erro ao obter dados"}
+        
+################################## Indicadores de Atividade e Confiança ##################################
+    async def get_industrial_production(self) -> Dict[str, Any]:
+        """Produção industrial - variação mensal"""
+        try:
+            # Produção industrial - variação mensal (%)
             url = "https://servicodados.ibge.gov.br/api/v3/agregados/3653/periodos/-2/variaveis/3135?localidades=N1[all]"
             async with self.session.get(url) as response:
                 if response.status == 200:
@@ -149,22 +403,23 @@ class APIServices:
                     if data and data[0]['resultados']:
                         resultados = data[0]['resultados'][0]['series'][0]['serie']
                         periodos = sorted(resultados.keys(), reverse=True)
-                        if len(periodos) >= 2:
+                        if len(periodos) >= 1:
                             ultimo_valor = parse_float(resultados[periodos[0]])
-                            penultimo_valor = parse_float(resultados[periodos[1]])
-                            if ultimo_valor is not None and penultimo_valor is not None:
-                                variacao = ultimo_valor - penultimo_valor
+                            if ultimo_valor is not None:
+                                sinal = "+" if ultimo_valor > 0 else ""
                                 return {
                                     "nome": "Produção Industrial",
-                                    "valor": f"{variacao:+.1f}%",
-                                    "descricao": f"Variação mensal - {periodos[0]}"
+                                    "valor": f"{sinal}{ultimo_valor:.1f}%",
+                                    "descricao": f"Variação mensal dessazonalizada - {periodos[0]}"
                                 }
         except Exception as e:
             logger.error(f"Erro ao obter produção industrial: {e}")
         return {"nome": "Produção Industrial", "valor": "N/D", "descricao": "Erro ao obter dados"}
 
     async def get_retail_sales(self) -> Dict[str, Any]:
+        """Vendas no varejo - variação mensal"""
         try:
+            # PMC - Pesquisa Mensal de Comércio - variação mensal
             url = "https://servicodados.ibge.gov.br/api/v3/agregados/3416/periodos/-2/variaveis/1781?localidades=N1[all]"
             async with self.session.get(url) as response:
                 if response.status == 200:
@@ -172,36 +427,192 @@ class APIServices:
                     if data and data[0]['resultados']:
                         resultados = data[0]['resultados'][0]['series'][0]['serie']
                         periodos = sorted(resultados.keys(), reverse=True)
-                        if len(periodos) >= 2:
+                        if len(periodos) >= 1:
                             ultimo_valor = parse_float(resultados[periodos[0]])
-                            penultimo_valor = parse_float(resultados[periodos[1]])
-                            if ultimo_valor is not None and penultimo_valor is not None:
-                                variacao = ultimo_valor - penultimo_valor
+                            if ultimo_valor is not None:
+                                sinal = "+" if ultimo_valor > 0 else ""
                                 return {
                                     "nome": "Vendas no Varejo",
-                                    "valor": f"{variacao:+.1f}%",
-                                    "descricao": f"Variação mensal - {periodos[0]}"
+                                    "valor": f"{sinal}{ultimo_valor:.1f}%",
+                                    "descricao": f"Variação mensal dessazonalizada - {periodos[0]}"
                                 }
         except Exception as e:
             logger.error(f"Erro ao obter vendas no varejo: {e}")
         return {"nome": "Vendas no Varejo", "valor": "N/D", "descricao": "Erro ao obter dados"}
+           
+    async def get_confidence_indices(self) -> Dict[str, Any]:
+        """Índices de confiança do consumidor, indústria e comércio"""
+        try:
+            # Usando APIs do BCB para índices de confiança
+            urls = {
+                "consumidor": "https://api.bcb.gov.br/dados/serie/bcdata.sgs.4393/dados/ultimos/2?formato=json",
+                "industria": "https://api.bcb.gov.br/dados/serie/bcdata.sgs.4394/dados/ultimos/2?formato=json", 
+                "comercio": "https://api.bcb.gov.br/dados/serie/bcdata.sgs.4395/dados/ultimos/2?formato=json"
+            }
 
+            tasks = [self.session.get(url) for url in urls.values()]
+            responses = await asyncio.gather(*tasks)
+            
+            result = {}
+            nomes = ["Consumidor", "Indústria", "Comércio"]
+            
+            for idx, (key, resp) in enumerate(zip(urls.keys(), responses)):
+                if resp.status == 200:
+                    data = await resp.json()
+                    if len(data) >= 2:
+                        atual = parse_float(data[-1].get("valor"))
+                        anterior = parse_float(data[-2].get("valor"))
+                        periodo = data[-1].get("data")
+                        
+                        if atual is not None:
+                            trend = "estável"
+                            if anterior is not None:
+                                if atual > anterior:
+                                    trend = "alta"
+                                elif atual < anterior:
+                                    trend = "baixa"
+                            
+                            result[key] = {
+                                "nome": f"Confiança {nomes[idx]}",
+                                "valor": f"{atual:.1f} pontos",
+                                "descricao": f"Índice de confiança - {periodo} (Tendência: {trend})"
+                            }
+                        else:
+                            result[key] = {
+                                "nome": f"Confiança {nomes[idx]}",
+                                "valor": "N/D",
+                                "descricao": "Erro ao obter dados"
+                            }
+                else:
+                    result[key] = {
+                        "nome": f"Confiança {nomes[idx]}",
+                        "valor": "N/D", 
+                        "descricao": "Erro ao obter dados"
+                    }
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Erro ao obter índices de confiança: {e}")
+
+        return {
+            "consumidor": {"nome": "Confiança Consumidor", "valor": "N/D", "descricao": "Erro ao obter dados"},
+            "industria": {"nome": "Confiança Indústria", "valor": "N/D", "descricao": "Erro ao obter dados"}, 
+            "comercio": {"nome": "Confiança Comércio", "valor": "N/D", "descricao": "Erro ao obter dados"}
+        }
+            
     async def get_all_indicators(self) -> list[Dict[str, Any]]:
-        tasks = [
-            self.get_selic_rate(),
-            self.get_ipca(),
-            self.get_dollar_rate(),
-            self.get_unemployment_rate(),
-            self.get_pib(),
-            self.get_bovespa(),
-            self.get_industrial_production(),
-            self.get_retail_sales()
+        """Coleta todos os indicadores principais"""
+        try:
+            # Executar todas as tarefas em paralelo
+            tasks = [
+                self.get_selic_rate(),
+                self.get_ipca(),
+                self.get_igpm(),
+                self.get_dollar_rate(),
+                self.get_unemployment_rate(),
+                self.get_gdp(),
+                self.get_gdp_growth(),
+                self.get_bovespa(),
+                self.get_industrial_production(),
+                self.get_retail_sales(),
+                self.get_real_income(),
+                self.get_trade_balance(),
+                self.get_trade_flow(),
+                self.get_credit_volume(),
+                self.get_default_rate()
+            ]
+            
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            indicators = []
+            
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    logger.error(f"Erro na task {i}: {result}")
+                    # Adicionar indicador com erro
+                    indicators.append({
+                        "nome": f"Indicador {i}",
+                        "valor": "N/D",
+                        "descricao": f"Erro: {str(result)}"
+                    })
+                else:
+                    indicators.append(result)
+            
+            # Adicionar índices de confiança (retorna dict)
+            confidence_data = await self.get_confidence_indices()
+            for conf_data in confidence_data.values():
+                indicators.append(conf_data)
+                
+            return indicators
+            
+        except Exception as e:
+            logger.error(f"Erro ao obter todos os indicadores: {e}")
+            return []
+
+
+# Função para testar todos os endpoints
+async def test_all_endpoints():
+    """Função para testar todos os endpoints da API"""
+    print("=== TESTE DE TODOS OS ENDPOINTS ===\n")
+    
+    async with APIServices() as api:
+        print("1. Testando indicadores individuais:\n")
+        
+        # Lista de métodos para testar
+        methods = [
+            ("PIB", api.get_gdp),
+            ("PIB Crescimento", api.get_gdp_growth),
+            ("IPCA", api.get_ipca), 
+            ("IGP-M", api.get_igpm),
+            ("Taxa Selic", api.get_selic_rate),
+            ("Dólar", api.get_dollar_rate),
+            ("Desemprego", api.get_unemployment_rate),
+            ("Renda Real", api.get_real_income),
+            ("Balança Comercial", api.get_trade_balance),
+            ("Corrente Comércio", api.get_trade_flow),
+            ("Ibovespa", api.get_bovespa),
+            ("Volume Crédito", api.get_credit_volume),
+            ("Taxa Inadimplência", api.get_default_rate),
+            ("Produção Industrial", api.get_industrial_production),
+            ("Vendas Varejo", api.get_retail_sales),
         ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        indicators = []
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                logger.error(f"Erro na task {i}: {result}")
-                continue
-            indicators.append(result)
-        return indicators
+        
+        for name, method in methods:
+            try:
+                result = await method()
+                print(f"✅ {name}:")
+                print(f"   Nome: {result['nome']}")
+                print(f"   Valor: {result['valor']}")
+                print(f"   Descrição: {result['descricao']}\n")
+            except Exception as e:
+                print(f"❌ {name}: ERRO - {e}\n")
+        
+        # Testar índices de confiança
+        print("2. Testando índices de confiança:\n")
+        try:
+            confidence = await api.get_confidence_indices()
+            for key, data in confidence.items():
+                print(f"✅ {key.capitalize()}:")
+                print(f"   Nome: {data['nome']}")
+                print(f"   Valor: {data['valor']}")
+                print(f"   Descrição: {data['descricao']}\n")
+        except Exception as e:
+            print(f"❌ Índices de Confiança: ERRO - {e}\n")
+        
+        # Testar função consolidada
+        print("3. Testando função get_all_indicators():\n")
+        try:
+            all_indicators = await api.get_all_indicators()
+            print(f"✅ Total de indicadores coletados: {len(all_indicators)}")
+            
+            success_count = sum(1 for ind in all_indicators if ind['valor'] != 'N/D')
+            print(f"✅ Indicadores com sucesso: {success_count}")
+            print(f"❌ Indicadores com erro: {len(all_indicators) - success_count}")
+            
+        except Exception as e:
+            print(f"❌ get_all_indicators(): ERRO - {e}")
+
+
+# Executar teste se executado diretamente
+if __name__ == "__main__":
+    asyncio.run(test_all_endpoints())
