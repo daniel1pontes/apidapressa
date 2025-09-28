@@ -1,13 +1,14 @@
 import asyncio
 from database import engine, Base, SessionLocal
 from models_db import IndicadorDB
+from sqlalchemy import text
 
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
     async with SessionLocal() as session:
-        result = await session.execute("SELECT COUNT(*) FROM indicadores;")
+        result = await session.execute(text("SELECT COUNT(*) FROM indicadores;"))
         count = result.scalar_one_or_none()
         if not count or count == 0:
             # Popula dados iniciais
