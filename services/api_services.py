@@ -168,7 +168,7 @@ class APIServices:
         
     async def get_gdp(self) -> Dict[str, Any]:
         try:
-            url = ("https://servicodados.ibge.gov.br/api/v3/agregados/1846/periodos/-4/variaveis/585?localidades=N1[all]&classificacao=11255[90707]")
+            url = ("https://servicodados.ibge.gov.br/api/v3/agregados/1846/periodos/-10/variaveis/585?localidades=N1[all]&classificacao=11255[90707]")
             async with aiohttp.ClientSession() as session:
                 async with session.get(url) as response:
                     data = await response.json()

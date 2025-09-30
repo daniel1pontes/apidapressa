@@ -4,6 +4,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import text
 from datetime import datetime
 import logging
+import asyncio
 
 from database import SessionLocal
 from models import Indicador
@@ -22,6 +23,62 @@ templates = Jinja2Templates(directory="templates")
 cache_data = {}
 cache_timestamp = None
 CACHE_DURATION = 3600  # 1 hora em segundos
+
+async def periodic_update():
+    """Atualização periódica automática a cada 30 minutos"""
+    while True:
+        try:
+            # Espera 30 minutos (1800 segundos)
+            await asyncio.sleep(1800)
+            logger.info("🔄 Executando atualização periódica automática...")
+            await update_indicators_from_apis()
+            logger.info("✅ Atualização periódica concluída")
+        except Exception as e:
+            logger.error(f"❌ Erro na atualização periódica: {e}")
+            # Se der erro, espera 5 minutos antes de tentar novamente
+            await asyncio.sleep(300)
+
+async def get_indicators_from_database():
+    """Busca indicadores diretamente do banco de dados"""
+    try:
+        async with SessionLocal() as session:
+            from sqlalchemy.future import select
+            result = await session.execute(select(IndicadorDB).order_by(IndicadorDB.id))
+            indicadores_db = result.scalars().all()
+            
+            indicators = []
+            for indicador in indicadores_db:
+                indicators.append({
+                    "nome": indicador.nome,
+                    "valor": indicador.valor,
+                    "descricao": indicador.descricao
+                })
+            
+            logger.info(f"📊 Buscados {len(indicators)} indicadores do banco de dados")
+            return indicators
+            
+    except Exception as e:
+        logger.error(f"❌ Erro ao buscar indicadores do banco: {e}")
+        return []
+
+@app.on_event("startup")
+async def startup_event():
+    """Evento executado na inicialização da aplicação"""
+    logger.info("🚀 Iniciando aplicação API Econômica...")
+    
+    # Inicializa banco
+    logger.info("Inicializando banco de dados...")
+    await init_db.init_db()
+    
+    # Faz uma primeira busca dos dados
+    logger.info("Realizando primeira coleta de dados...")
+    await update_indicators_from_apis()
+    
+    # Inicia a tarefa de atualização periódica
+    asyncio.create_task(periodic_update())
+    logger.info("✅ Tarefa de atualização periódica iniciada (30min)")
+    
+    logger.info("✅ Aplicação iniciada com sucesso!")
 
 async def update_indicators_from_apis():
     """Atualiza os indicadores obtendo dados das APIs oficiais"""
@@ -62,51 +119,32 @@ async def update_indicators_from_apis():
         logger.error(f"❌ Erro ao atualizar indicadores: {e}")
         return []
 
+# ⭐⭐ CORREÇÃO AQUI: Função simplificada para SEMPRE buscar do banco ⭐⭐
 async def get_cached_indicators():
-    """Retorna indicadores do cache ou busca novos se necessário"""
-    global cache_data, cache_timestamp
-    
-    now = datetime.now()
-    
-    # Se não há cache ou está expirado
-    if not cache_timestamp or (now - cache_timestamp).seconds > CACHE_DURATION:
-        logger.info("Cache expirado ou inexistente, buscando novos dados...")
-        indicators = await update_indicators_from_apis()
+    """Retorna indicadores SEMPRE do banco de dados"""
+    try:
+        indicators = await get_indicators_from_database()
+        
+        # Se encontrou dados no banco, atualiza o cache
         if indicators:
+            global cache_data, cache_timestamp
+            cache_data = indicators
+            cache_timestamp = datetime.now()
+            logger.info(f"✅ Retornando {len(indicators)} indicadores do banco")
             return indicators
-    
-    # Retorna do cache
-    if cache_data:
-        logger.info(f"Retornando {len(cache_data)} indicadores do cache")
-        return cache_data
-    
-    # Fallback: busca do banco de dados
-    logger.info("Fallback: buscando do banco de dados")
-    async with SessionLocal() as session:
-        from sqlalchemy.future import select
-        result = await session.execute(select(IndicadorDB))
-        indicadores_db = result.scalars().all()
-        return [{"nome": i.nome, "valor": i.valor, "descricao": i.descricao} for i in indicadores_db]
+        else:
+            # Se o banco está vazio, tenta atualizar das APIs
+            logger.info("📭 Banco vazio, buscando dados das APIs...")
+            return await update_indicators_from_apis()
+            
+    except Exception as e:
+        logger.error(f"❌ Erro ao buscar indicadores: {e}")
+        return []
 
-@app.on_event("startup")
-async def startup_event():
-    """Evento executado na inicialização da aplicação"""
-    logger.info("🚀 Iniciando aplicação API Econômica...")
-    
-    # Inicializa banco
-    logger.info("Inicializando banco de dados...")
-    await init_db.init_db()
-    
-    # Faz uma primeira busca dos dados
-    logger.info("Realizando primeira coleta de dados...")
-    await update_indicators_from_apis()
-    
-    logger.info("✅ Aplicação iniciada com sucesso!")
-
-# Endpoints JSON
+# Endpoints JSON - AGORA BUSCAM DO BANCO
 @app.get("/api/indicadores", response_model=list[Indicador])
 async def get_indicadores_json():
-    """Retorna todos os indicadores em formato JSON"""
+    """Retorna todos os indicadores em formato JSON (do banco)"""
     indicators = await get_cached_indicators()
     return [
         Indicador(
@@ -120,7 +158,7 @@ async def get_indicadores_json():
 
 @app.get("/api/indicadores/{nome}")
 async def get_indicador_by_name(nome: str):
-    """Retorna um indicador específico por nome"""
+    """Retorna um indicador específico por nome (do banco)"""
     indicators = await get_cached_indicators()
     
     # Normaliza o nome para busca
@@ -152,19 +190,27 @@ async def get_status():
     if cache_timestamp:
         cache_age = (datetime.now() - cache_timestamp).seconds
     
+    # Busca contagem atual do banco
+    async with SessionLocal() as session:
+        from sqlalchemy.future import select
+        result = await session.execute(select(IndicadorDB))
+        total_indicators = len(result.scalars().all())
+    
     return {
         "status": "online",
         "cache_updated": cache_timestamp.isoformat() if cache_timestamp else None,
         "cache_age_seconds": cache_age,
         "cache_age_minutes": round(cache_age / 60, 1) if cache_age else None,
         "indicators_cached": len(cache_data) if cache_data else 0,
-        "cache_expired": cache_age > CACHE_DURATION if cache_age else True
+        "indicators_in_database": total_indicators,
+        "cache_expired": cache_age > CACHE_DURATION if cache_age else True,
+        "data_source": "database"
     }
 
-# Endpoint HTML
+# Endpoint HTML - AGORA BUSCA DO BANCO
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    """Página principal com tabela de indicadores"""
+    """Página principal com tabela de indicadores (do banco)"""
     indicators = await get_cached_indicators()
     
     return templates.TemplateResponse("index.html", {
@@ -179,5 +225,16 @@ async def health_check():
     return {
         "status": "healthy", 
         "timestamp": datetime.now().isoformat(),
-        "cache_active": cache_timestamp is not None
+        "cache_active": cache_timestamp is not None,
+        "data_source": "database"
+    }
+
+@app.get("/api/indicadores/database")
+async def get_indicadores_direct_from_db():
+    """Retorna indicadores diretamente do banco (sem cache)"""
+    indicators = await get_indicators_from_database()
+    return {
+        "source": "database_direct",
+        "count": len(indicators),
+        "indicators": indicators
     }
