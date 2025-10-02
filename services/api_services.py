@@ -242,15 +242,11 @@ class APIServices:
                     data = await response.json()
             
             if data:
-                # Navegar no JSON até a série
                 serie = data[0]["resultados"][0]["series"][0]["serie"]
-                periodo = list(serie.keys())[0]  # "202502"
+                periodo = list(serie.keys())[0]
                 valor = float(serie[periodo])
                 
-                # Converter período do formato AAAAMM para MM/AAAA
                 periodo_formatado = f"{periodo[4:6]}/{periodo[0:4]}"
-                
-                # Formatação padrão brasileira: R$ 1.234,56
                 valor_formatado = f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 
                 return {
@@ -318,7 +314,6 @@ class APIServices:
                 atual = float(data[-1].get("valor"))
                 data_info = data[-1].get("data", "")
                 
-                # Cálculo simples da variação em relação ao período anterior, se disponível
                 variacao_text = ""
                 if len(data) >= 2:
                     anterior = float(data[-2].get("valor"))
@@ -361,7 +356,7 @@ class APIServices:
                 valor = float(data[0].get("valor"))
                 data_info = data[0].get("data", "")
                 
-                valor_bi = valor / 1000  # Converter de milhões para bilhões
+                valor_bi = valor / 1000
                 
                 try:
                     dt = datetime.strptime(data_info, "%d/%m/%Y")
@@ -464,7 +459,7 @@ class APIServices:
                     data = await response.json()
             
             if data:
-                valor = float(data[0].get("valor")) / 100  # ajuste de escala
+                valor = float(data[0].get("valor")) / 100
                 data_info = data[0].get("data", "")
                 
                 sinal = "+" if valor > 0 else ""
@@ -543,10 +538,8 @@ class APIServices:
             self.get_confidence_consumer()
         ]
 
-        # Executa todas as coroutines simultaneamente
         resultados = await asyncio.gather(*indicadores_coroutines, return_exceptions=True)
 
-        # Tratar exceções individuais para não quebrar toda a coleta
         indicadores = []
         for res in resultados:
             if isinstance(res, Exception):
@@ -560,3 +553,98 @@ class APIServices:
                 indicadores.append(res)
 
         return indicadores
+
+    ################################## HISTÓRICO DOS INDICADORES ##################################
+    
+    async def get_historico_indicador(self, slug: str) -> Optional[Dict[str, Any]]:
+        """Busca histórico real de 12 meses do indicador nas APIs oficiais"""
+        
+        mapeamento_slugs = {
+            'taxa-selic': ('bcb', 432),
+            'inflacao-ipca': ('bcb', 433),
+            'igp-m': ('bcb', 189),
+            'dolar-usdbrl': ('bcb', 1),
+            'taxa-de-desemprego': ('bcb', 24369),
+            'ibovespa': ('bcb', 7),
+            'producao-industrial': ('bcb', 21859),
+            'vendas-no-varejo': ('bcb', 1455),
+            'confianca-do-consumidor': ('bcb', 4393),
+            'pib': ('ibge', 1846)
+        }
+        
+        if slug not in mapeamento_slugs:
+            return None
+        
+        fonte, serie = mapeamento_slugs[slug]
+        
+        try:
+            if fonte == 'bcb':
+                # Busca últimos 12 períodos do BCB
+                url = f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.{serie}/dados/ultimos/12?formato=json"
+                
+                async with self.session.get(url) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        
+                        if data:
+                            labels = []
+                            valores = []
+                            
+                            for item in data:
+                                # Formata data
+                                data_str = item.get('data', '')
+                                try:
+                                    dt = datetime.strptime(data_str, "%d/%m/%Y")
+                                    labels.append(dt.strftime("%b/%y"))
+                                except:
+                                    labels.append(data_str[:7] if len(data_str) >= 7 else data_str)
+                                
+                                # Pega valor
+                                valor = float(item.get('valor', 0))
+                                valores.append(valor)
+                            
+                            return {
+                                "labels": labels,
+                                "valores": valores,
+                                "total_periodos": len(valores)
+                            }
+            
+            elif fonte == 'ibge' and slug == 'pib':
+                # PIB tem tratamento especial
+                url = "https://servicodados.ibge.gov.br/api/v3/agregados/1846/periodos/-12/variaveis/585?localidades=N1[all]&classificacao=11255[90707]"
+                
+                async with self.session.get(url) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        
+                        if data and data[0]["resultados"]:
+                            serie_data = data[0]["resultados"][0]["series"][0]["serie"]
+                            
+                            labels = []
+                            valores = []
+                            
+                            # Ordena por período e pega últimos 12
+                            periodos_ordenados = sorted(serie_data.items())[-12:]
+                            
+                            for periodo, valor in periodos_ordenados:
+                                # Formata período (ex: 202401 -> T1/24)
+                                try:
+                                    ano = periodo[:4]
+                                    tri = periodo[4:]
+                                    labels.append(f"T{tri}/{ano[2:]}")
+                                except:
+                                    labels.append(periodo)
+                                
+                                valores.append(float(valor) / 1000)  # Converter para bilhões
+                            
+                            return {
+                                "labels": labels,
+                                "valores": valores,
+                                "total_periodos": len(valores)
+                            }
+        
+        except Exception as e:
+            logger.error(f"Erro ao buscar histórico de {slug}: {e}")
+            return None
+        
+        return None

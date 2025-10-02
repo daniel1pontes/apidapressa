@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ indicador.nome }} - Detalhes</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1E88E5 0%, #42A5F5 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #1565C0 0%, #1E88E5 100%);
+            color: white;
+            padding: 30px;
+            position: relative;
+        }
+
+        .back-btn {
+            position: absolute;
+            top: 30px;
+            left: 30px;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .back-btn:hover {
+            background: rgba(255,255,255,0.3);
+            transform: translateX(-5px);
+        }
+
+        .header-content {
+            text-align: center;
+            padding: 0 100px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .current-value {
+            background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
+            padding: 30px;
+            text-align: center;
+            border-bottom: 1px solid #90CAF9;
+        }
+
+        .current-value h2 {
+            color: #1565C0;
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+            font-weight: 400;
+        }
+
+        .current-value .value {
+            font-size: 3rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #1E88E5, #1565C0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+
+        .current-value .description {
+            color: #1565C0;
+            font-size: 1rem;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .section {
+            margin-bottom: 40px;
+        }
+
+        .section-title {
+            font-size: 1.8rem;
+            color: #1565C0;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #42A5F5;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 400px;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            border: 1px solid #E3F2FD;
+        }
+
+        .analysis-section {
+            background: #F5F5F5;
+            padding: 30px;
+            border-radius: 10px;
+            margin-top: 30px;
+        }
+
+        .analysis-content {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            border-left: 4px solid #1E88E5;
+            line-height: 1.8;
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .analysis-content h3 {
+            color: #1565C0;
+            margin-bottom: 15px;
+            font-size: 1.5rem;
+        }
+
+        .analysis-content p {
+            margin-bottom: 15px;
+            text-align: justify;
+        }
+
+        .analysis-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 15px;
+            border-top: 1px solid #E3F2FD;
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .no-analysis {
+            background: #FFF9E6;
+            border: 1px solid #FFD54F;
+            border-radius: 8px;
+            padding: 20px;
+            color: #F57F17;
+            text-align: center;
+        }
+
+        .edit-form {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            margin-top: 20px;
+            border: 1px solid #E3F2FD;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #1565C0;
+            font-weight: 600;
+        }
+
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #E3F2FD;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-family: inherit;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #42A5F5;
+        }
+
+        .form-group textarea {
+            min-height: 200px;
+            resize: vertical;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #1E88E5 0%, #1565C0 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(30,136,229,0.4);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #90CAF9 0%, #64B5F6 100%);
+        }
+
+        .btn-secondary:hover {
+            box-shadow: 0 5px 15px rgba(100,181,246,0.4);
+        }
+
+        .toggle-form-btn {
+            margin-top: 15px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .insights-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .insight-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #42A5F5;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .insight-card h4 {
+            color: #1E88E5;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+
+        .insight-card p {
+            color: #666;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        .link-materia {
+            display: inline-block;
+            margin-top: 15px;
+            padding: 10px 20px;
+            background: #E3F2FD;
+            color: #1565C0;
+            text-decoration: none;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+        }
+
+        .link-materia:hover {
+            background: #BBDEFB;
+            transform: translateX(5px);
+        }
+
+        @media (max-width: 768px) {
+            .header-content {
+                padding: 0 20px;
+            }
+
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .back-btn {
+                position: relative;
+                top: 0;
+                left: 0;
+                margin-bottom: 20px;
+            }
+
+            .current-value .value {
+                font-size: 2.5rem;
+            }
+
+            .content {
+                padding: 20px;
+            }
+
+            .chart-container {
+                height: 300px;
+            }
+
+            .insights-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="/" class="back-btn">← Voltar</a>
+            <div class="header-content">
+                <h1>{{ indicador.nome }}</h1>
+                <p>Análise detalhada e histórico</p>
+            </div>
+        </div>
+
+        <div class="current-value">
+            <h2>Valor Atual do Indicador</h2>
+            <div class="value">{{ indicador.valor }}</div>
+            <div class="description">{{ indicador.descricao }}</div>
+        </div>
+
+        <div class="content">
+            <!-- Seção do Gráfico (só mostra se tem histórico) -->
+            {% if tem_historico and historico %}
+            <section class="section">
+                <h2 class="section-title">📊 Evolução Histórica (Últimos 12 Meses)</h2>
+                <div class="chart-container">
+                    <canvas id="indicadorChart"></canvas>
+                </div>
+            </section>
+            {% else %}
+            <section class="section">
+                <div style="background: #FFF9E6; border: 1px solid #FFD54F; border-radius: 8px; padding: 20px; text-align: center; color: #F57F17;">
+                    <h3 style="margin-bottom: 10px;">ℹ️ Histórico Não Disponível</h3>
+                    <p>Este indicador não possui dados históricos disponíveis nas APIs oficiais.</p>
+                </div>
+            </section>
+            {% endif %}
+
+            <!-- Insights Automáticos (só mostra se tem histórico) -->
+            {% if tem_historico and historico %}
+            <section class="section">
+                <h2 class="section-title">💡 Análise Automática</h2>
+                <div class="insights-grid">
+                    <div class="insight-card">
+                        <h4>Tendência</h4>
+                        <p id="tendencia">Calculando tendência baseada nos dados históricos...</p>
+                    </div>
+                    <div class="insight-card">
+                        <h4>Variação</h4>
+                        <p id="variacao">Analisando variação percentual...</p>
+                    </div>
+                    <div class="insight-card">
+                        <h4>Contexto</h4>
+                        <p id="contexto">Comparando com médias históricas...</p>
+                    </div>
+                </div>
+            </section>
+            {% endif %}
+
+            <!-- Análise do Economista -->
+            <section class="section analysis-section">
+                <h2 class="section-title">📝 Análise do Economista</h2>
+                
+                {% if analise.conteudo %}
+                <div class="analysis-content">
+                    <h3>{{ analise.titulo }}</h3>
+                    <p>{{ analise.conteudo }}</p>
+                    
+                    {% if analise.link_materia %}
+                    <a href="{{ analise.link_materia }}" target="_blank" class="link-materia">
+                        📰 Ler matéria completa →
+                    </a>
+                    {% endif %}
+                    
+                    <div class="analysis-meta">
+                        <span><strong>Por:</strong> {{ analise.autor }}</span>
+                        <span><strong>Publicado em:</strong> {{ analise.data }}</span>
+                    </div>
+                </div>
+                {% else %}
+                <div class="no-analysis">
+                    <p><strong>⚠️ Ainda não há análise disponível para este indicador</strong></p>
+                    <p>Um economista pode adicionar insights e contexto sobre este dado.</p>
+                </div>
+                {% endif %}
+
+                {% if is_authenticated %}
+                <button class="btn btn-secondary toggle-form-btn" onclick="toggleForm()">
+                    {% if analise.conteudo %}
+                    ✏️ Editar Análise
+                    {% else %}
+                    ✍️ Adicionar Análise
+                    {% endif %}
+                </button>
+
+                <div id="editForm" class="edit-form hidden">
+                    <h3 style="color: #1565C0; margin-bottom: 20px;">
+                        {% if analise.conteudo %}Editar{% else %}Adicionar{% endif %} Análise
+                    </h3>
+                    <form action="/indicador/{{ slug }}/salvar-analise" method="POST">
+                        <div class="form-group">
+                            <label for="titulo">Título da Análise</label>
+                            <input type="text" id="titulo" name="titulo" 
+                                   value="{{ analise.titulo }}" 
+                                   placeholder="Ex: Análise do IPCA de Setembro 2025"
+                                   required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="conteudo">Conteúdo da Análise</label>
+                            <textarea id="conteudo" name="conteudo" 
+                                      placeholder="Escreva aqui sua análise detalhada sobre o indicador, contexto econômico, impactos esperados, etc."
+                                      required>{{ analise.conteudo }}</textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="autor">Nome do Economista/Autor</label>
+                            <input type="text" id="autor" name="autor" 
+                                   value="{{ analise.autor }}"
+                                   placeholder="Ex: Dr. João Silva"
+                                   required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="link_materia">Link da Matéria (opcional)</label>
+                            <input type="url" id="link_materia" name="link_materia" 
+                                   value="{{ analise.link_materia }}"
+                                   placeholder="https://exemplo.com/materia">
+                        </div>
+
+                        <button type="submit" class="btn">💾 Salvar Análise</button>
+                        <button type="button" class="btn btn-secondary" onclick="toggleForm()" style="margin-left: 10px;">
+                            ❌ Cancelar
+                        </button>
+                    </form>
+                </div>
+                {% else %}
+                <div style="text-align: center; margin-top: 20px;">
+                    <p style="color: #6c757d; margin-bottom: 10px;">
+                        Você precisa fazer login para adicionar ou editar análises
+                    </p>
+                    <a href="/admin/login" class="btn btn-secondary">
+                        🔐 Fazer Login
+                    </a>
+                </div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+
+    <script>
+    function toggleForm() {
+        const form = document.getElementById('editForm');
+        form.classList.toggle('hidden');
+    }
+
+        // Dados do histórico (vindos da API ou null se não houver)
+        const temHistorico = {{ (tem_historico and historico is not none)|tojson }};
+
+        
+        let meses = [];
+        let dados = [];
+        
+        {% if tem_historico and historico %}
+            // Dados reais da API
+            meses = {{ historico.labels | tojson }};
+            dados = {{ historico.valores | tojson }};
+        {% endif %}
+
+    // Criar gráfico (só se tiver histórico)
+    if (temHistorico && meses.length > 0 && dados.length > 0) {
+        const ctx = document.getElementById('indicadorChart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: meses,
+                datasets: [{
+                    label: '{{ indicador.nome }}',
+                    data: dados,
+                    borderColor: '#1E88E5',
+                    backgroundColor: 'rgba(30, 136, 229, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 5,
+                    pointBackgroundColor: '#1E88E5',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointHoverRadius: 7,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            font: {
+                                size: 14,
+                                weight: 'bold'
+                            },
+                            color: '#1565C0'
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(21, 101, 192, 0.9)',
+                        titleFont: { size: 14 },
+                        bodyFont: { size: 13 },
+                        padding: 12,
+                        cornerRadius: 8
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        grid: { color: 'rgba(30, 136, 229, 0.1)' },
+                        ticks: {
+                            font: { size: 12 },
+                            color: '#1565C0'
+                        }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: {
+                            font: { size: 12 },
+                            color: '#1565C0'
+                        }
+                    }
+                }
+            }
+        });
+
+        // Análise automática baseada nos dados reais
+        function analisarDados() {
+            const primeiro = dados[0];
+            const ultimo = dados[dados.length - 1];
+
+            const variacao = ((ultimo - primeiro) / primeiro * 100);
+            const variacaoFormatada = variacao.toFixed(2);
+            const media = (dados.reduce((a, b) => a + b, 0) / dados.length).toFixed(2);
+            
+            // Tendência
+            let tendenciaTexto = '';
+            if (variacao > 5) {
+                tendenciaTexto = `📈 Tendência de <strong>alta</strong> nos últimos 12 meses (+${variacaoFormatada}%)`;
+            } else if (variacao < -5) {
+                tendenciaTexto = `📉 Tendência de <strong>baixa</strong> nos últimos 12 meses (${variacaoFormatada}%)`;
+            } else {
+                tendenciaTexto = `➡️ Tendência <strong>estável</strong> nos últimos 12 meses (${variacaoFormatada}%)`;
+            }
+
+            if (document.getElementById('tendencia')) {
+                document.getElementById('tendencia').innerHTML = tendenciaTexto;
+            }
+            
+            // Variação mensal
+            if (dados.length >= 2 && document.getElementById('variacao')) {
+                const variacaoMensal = ((dados[dados.length - 1] - dados[dados.length - 2]) / dados[dados.length - 2] * 100).toFixed(2);
+                const sinalVariacao = variacaoMensal >= 0 ? '+' : '';
+                document.getElementById('variacao').innerHTML = 
+                    `Variação mensal: <strong>${sinalVariacao}${variacaoMensal}%</strong> em relação ao mês anterior`;
+            }
+            
+            // Contexto
+            if (document.getElementById('contexto')) {
+                const acimaDaMedia = ultimo > media;
+                document.getElementById('contexto').innerHTML = 
+                    `Valor atual está <strong>${acimaDaMedia ? 'acima' : 'abaixo'}</strong> da média dos últimos 12 meses (${media})`;
+            }
+        }
+
+        analisarDados();
+    }
+</script>
+
+</body>
+</html>
