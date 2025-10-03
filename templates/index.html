@@ -13,13 +13,13 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(180deg, #007bff 0%, #88bdf5 100%);
             min-height: 100vh;
             padding: 20px;
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
             background: white;
             border-radius: 15px;
@@ -28,7 +28,7 @@
         }
 
         .header {
-            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            background: linear-gradient(135deg, #1565C0 0%, #1E88E5 100%);
             color: white;
             padding: 30px;
             text-align: center;
@@ -46,12 +46,12 @@
         }
 
         .update-info {
-            background: #f8f9fa;
+            background: #E3F2FD;
             padding: 15px 30px;
-            border-left: 4px solid #007bff;
+            border-left: 4px solid #1E88E5;
             margin: 0;
             font-size: 0.95rem;
-            color: #6c757d;
+            color: #1565C0;
         }
 
         .controls {
@@ -66,7 +66,7 @@
         }
 
         .btn {
-            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+            background: linear-gradient(135deg, #1E88E5 0%, #1565C0 100%);
             color: white;
             border: none;
             padding: 10px 20px;
@@ -80,7 +80,7 @@
 
         .btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0,123,255,0.4);
+            box-shadow: 0 5px 15px rgba(30,136,229,0.4);
         }
 
         .btn-success {
@@ -94,7 +94,7 @@
         .indicators-grid {
             padding: 30px;
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
             gap: 20px;
         }
 
@@ -106,6 +106,10 @@
             transition: all 0.3s ease;
             position: relative;
             overflow: hidden;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+            display: block;
         }
 
         .indicator-card::before {
@@ -115,37 +119,84 @@
             left: 0;
             right: 0;
             height: 4px;
-            background: linear-gradient(90deg, #667eea, #764ba2);
+            background: linear-gradient(90deg, #0056b3, #0056b3);
         }
 
         .indicator-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            border-color: #007bff;
+            transform: translateY(-8px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.15);
+            border-color: #1E88E5;
+        }
+
+        .indicator-card:hover::before {
+            height: 6px;
+        }
+
+        .indicator-icon {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 2.5rem;
+            opacity: 0.1;
+            transition: all 0.3s ease;
+        }
+
+        .indicator-card:hover .indicator-icon {
+            opacity: 0.3;
+            transform: scale(1.1);
         }
 
         .indicator-name {
             font-size: 1.2rem;
             font-weight: 600;
-            color: #2c3e50;
-            margin-bottom: 10px;
+            color: #1565C0;
+            margin-bottom: 12px;
+            position: relative;
+            z-index: 1;
         }
 
         .indicator-value {
-            font-size: 1.8rem;
+            font-size: 1.9rem;
             font-weight: 700;
-            color: #007bff;
+            color: #1E88E5;
             margin-bottom: 15px;
-            background: linear-gradient(135deg, #007bff, #0056b3);
+            background: linear-gradient(135deg, #1E88E5, #1565C0);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
+            position: relative;
+            z-index: 1;
         }
 
         .indicator-description {
             color: #6c757d;
             font-size: 0.95rem;
             line-height: 1.5;
+            margin-bottom: 15px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .view-details {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: #1E88E5;
+            font-size: 0.9rem;
+            font-weight: 600;
+            opacity: 0;
+            transform: translateX(-10px);
+            transition: all 0.3s ease;
+        }
+
+        .indicator-card:hover .view-details {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .view-details::after {
+            content: '→';
+            font-size: 1.2rem;
         }
 
         .footer {
@@ -155,12 +206,6 @@
             color: #6c757d;
             font-size: 0.9rem;
             border-top: 1px solid #dee2e6;
-        }
-
-        .loading {
-            display: none;
-            color: #007bff;
-            font-size: 0.9rem;
         }
 
         .status-indicator {
@@ -177,6 +222,23 @@
             0% { opacity: 1; }
             50% { opacity: 0.5; }
             100% { opacity: 1; }
+        }
+
+        .info-banner {
+            background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%);
+            padding: 15px 30px;
+            margin: 0;
+            color: #1565C0;
+            font-size: 0.95rem;
+            border-bottom: 1px solid #90CAF9;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .info-banner::before {
+            content: '💡';
+            font-size: 1.5rem;
         }
 
         @media (max-width: 768px) {
@@ -201,14 +263,22 @@
             .btn {
                 text-align: center;
             }
+
+            .info-banner {
+                font-size: 0.85rem;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🇧🇷 Indicadores Econômicos</h1>
+            <h1>🇧🇷 Indicadores Econômicos Brasileiros</h1>
             <p>Dados oficiais do Banco Central, IBGE e outras fontes governamentais</p>
+        </div>
+
+        <div class="info-banner">
+            <span>Clique em qualquer indicador para ver gráficos detalhados e análises econômicas</span>
         </div>
 
         <div class="update-info">
@@ -228,11 +298,13 @@
 
         <div class="indicators-grid">
             {% for indicador in indicadores %}
-            <div class="indicator-card">
+            <a href="/indicador/{{ indicador.slug }}" class="indicator-card">
+                <div class="indicator-icon">📊</div>
                 <div class="indicator-name">{{ indicador.nome }}</div>
                 <div class="indicator-value">{{ indicador.valor }}</div>
                 <div class="indicator-description">{{ indicador.descricao }}</div>
-            </div>
+                <div class="view-details">Ver detalhes e gráficos</div>
+            </a>
             {% endfor %}
         </div>
 
